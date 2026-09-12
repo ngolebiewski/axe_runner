@@ -15,38 +15,54 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up Emscripten (emcc)
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v3
         with:
           version: 'latest'
 
-      # Download prebuilt Raylib WebAssembly binaries
-      - name: Setup Raylib
-        uses: raylib-extras/setup-raylib@v1
+      - name: Cache Raylib WASM build
+        id: cache-raylib
+        uses: actions/cache@v4
         with:
-          platform: web
+          path: raylib
+          key: raylib-wasm-${{ runner.os }}-v1
+
+      - name: Checkout Raylib source
+        if: steps.cache-raylib.outputs.cache-hit != 'true'
+        run: git clone --depth 1 https://github.com/raysan5/raylib.git
+
+      - name: Build Raylib for WASM
+        if: steps.cache-raylib.outputs.cache-hit != 'true'
+        run: |
+          cd raylib/src
+          emmake make PLATFORM=PLATFORM_WEB -B
 
       - name: Create dist directory
         run: mkdir -p dist
 
-      # Compile game using the prebuilt libraylib.a from the action
       - name: Compile Game
         run: |
-          emcc -o dist/index.html main.c \
-            ${{ env.RAYLIB_LIB_PATH }}/libraylib.a \
-            -I. -I${{ env.RAYLIB_INCLUDE_PATH }} \
+          emcc -o dist/index.html main.c raylib/src/libraylib.a \
+            -I. -Iraylib/src \
             -s USE_GLFW=3 \
             -s ASYNCIFY \
             -s TOTAL_MEMORY=67108864 \
             -s FORCE_FILESYSTEM=1 \
             --embed-file axe_demo.png \
+            --shell-file raylib/src/shell.html \
             -DPLATFORM_WEB -O2
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
