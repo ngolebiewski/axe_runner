@@ -2,8 +2,8 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 450
+#define GAME_WIDTH 800
+#define GAME_HEIGHT 450
 #define SPRITE_SIZE 16
 #define SCALE 3.0f
 #define RENDER_SIZE (SPRITE_SIZE * SCALE)
@@ -65,7 +65,7 @@ void SpawnParticles(Vector2 pos, Color color) {
 }
 
 void ResetGame(void) {
-    playerPos = (Vector2){ 150, SCREEN_HEIGHT / 2.0f };
+    playerPos = (Vector2){ 150, GAME_HEIGHT / 2.0f };
     throwTimer = 0.0f;
 
     for (int i = 0; i < MAX_AXES; i++) axes[i].active = false;
@@ -74,27 +74,28 @@ void ResetGame(void) {
     for (int i = 0; i < MAX_WALLS; i++) walls[i].active = false;
     for (int i = 0; i < MAX_PARTICLES; i++) particles[i].active = false;
 
-    // Standard brick walls
     walls[0] = (Wall){ (Rectangle){ 600, 100, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
     walls[1] = (Wall){ (Rectangle){ 900, 250, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
-    
-    // Middle Spike Wall hazard
     walls[2] = (Wall){ (Rectangle){ 1200, 50, RENDER_SIZE, RENDER_SIZE * 4 }, true, true };
 
     goblins[0] = (Goblin){ (Vector2){ 750, 150 }, true, 0.0f, 7, 0.0f, 0 };
     goblins[1] = (Goblin){ (Vector2){ 1050, 300 }, true, 0.0f, 7, 0.0f, 0 };
-    goblins[2] = (Goblin){ (Vector2){ 1150, 500 }, true, 0.0f, 7, 0.0f, 0 };
     goblins[2] = (Goblin){ (Vector2){ 450, 200 }, true, 0.0f, 7, 0.0f, 0 };
 
-    heartPos = (Vector2){ 1500, SCREEN_HEIGHT / 2.0f };
+    heartPos = (Vector2){ 1500, GAME_HEIGHT / 2.0f };
     heartActive = true;
     spikeWallX = 1650.0f;
 }
 
 int main(void) {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Axe Runner");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(GAME_WIDTH, GAME_HEIGHT, "Axe Runner");
     SetTargetFPS(60);
+
     spriteSheet = LoadTexture("axe_demo.png");
+
+    RenderTexture2D target = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
+    SetTextureFilter(target.texture, TEXTURE_FILTER_POINT);
 
     GameState currentState = STATE_TITLE;
     Color darkBrown = (Color){ 25, 15, 10, 255 };
@@ -110,7 +111,11 @@ int main(void) {
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
 
-        // Update Particle physics across active states
+        if (IsKeyPressed(KEY_F)) {
+            ToggleFullscreen();
+        }
+
+        // Particle System Update
         for (int i = 0; i < MAX_PARTICLES; i++) {
             if (particles[i].active) {
                 particles[i].position.x += particles[i].velocity.x * deltaTime;
@@ -122,7 +127,6 @@ int main(void) {
 
         switch (currentState) {
             case STATE_TITLE:
-                // Update idle animation (switches every 0.4 seconds for a slow effect)
                 titleAnimTimer += deltaTime;
                 if (titleAnimTimer >= 0.4f) {
                     titleAnimTimer = 0.0f;
@@ -143,7 +147,7 @@ int main(void) {
                 if (IsKeyDown(KEY_DOWN)) playerPos.y += playerSpeed * deltaTime;
 
                 if (playerPos.y < RENDER_SIZE / 2) playerPos.y = RENDER_SIZE / 2;
-                if (playerPos.y > SCREEN_HEIGHT - RENDER_SIZE * 1.5f) playerPos.y = SCREEN_HEIGHT - RENDER_SIZE * 1.5f;
+                if (playerPos.y > GAME_HEIGHT - RENDER_SIZE * 1.5f) playerPos.y = GAME_HEIGHT - RENDER_SIZE * 1.5f;
 
                 playerAnimTimer += deltaTime;
                 if (playerAnimTimer >= 0.1f) {
@@ -151,7 +155,6 @@ int main(void) {
                     if (++playerAnimFrame > 5) playerAnimFrame = 3;
                 }
 
-                // Auto-throw axes
                 throwTimer += deltaTime;
                 if (throwTimer >= 0.35f) {
                     throwTimer = 0.0f;
@@ -166,7 +169,6 @@ int main(void) {
                     }
                 }
 
-                // Update Axes & Check Wall Collision
                 for (int i = 0; i < MAX_AXES; i++) {
                     if (axes[i].active) {
                         axes[i].position.x += axes[i].velocity.x * deltaTime;
@@ -182,13 +184,12 @@ int main(void) {
                             }
                         }
 
-                        if (axes[i].position.x > SCREEN_WIDTH + 50 || axes[i].position.y > SCREEN_HEIGHT + 50) {
+                        if (axes[i].position.x > GAME_WIDTH + 50 || axes[i].position.y > GAME_HEIGHT + 50) {
                             axes[i].active = false;
                         }
                     }
                 }
 
-                // Update Darts & Check Wall Collision
                 for (int i = 0; i < MAX_DARTS; i++) {
                     if (darts[i].active) {
                         darts[i].position.x += darts[i].velocity.x * deltaTime;
@@ -213,7 +214,6 @@ int main(void) {
                     }
                 }
 
-                // Update Walls & Player Collision
                 Rectangle playerRect = { playerPos.x - RENDER_SIZE/2, playerPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
                 bool pushedByWall = false;
 
@@ -242,17 +242,14 @@ int main(void) {
                     currentState = STATE_GAMEOVER;
                 }
 
-                // Update Goblins (Animates, reroutes around walls, dies to spikes, shoots darts)
                 for (int i = 0; i < MAX_GOBLINS; i++) {
                     if (goblins[i].active) {
-                        // 1. Goblin Animation
                         goblins[i].animTimer += deltaTime;
                         if (goblins[i].animTimer >= 0.15f) {
                             goblins[i].animTimer = 0.0f;
                             goblins[i].animFrame = (goblins[i].animFrame == 7) ? 8 : 7;
                         }
 
-                        // 2. Navigation / Movement
                         float gobSpeedX = scrollSpeed + 110.0f;
                         float gobSpeedY = 150.0f;
 
@@ -267,8 +264,7 @@ int main(void) {
 
                         Rectangle goblinRect = { nextPos.x - RENDER_SIZE/2, nextPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
 
-                        // Check collision with spike hazards (Left screen spikes or Spike Walls)
-                        Rectangle leftSpikesRect = { 0, 0, RENDER_SIZE, SCREEN_HEIGHT };
+                        Rectangle leftSpikesRect = { 0, 0, RENDER_SIZE, GAME_HEIGHT };
                         if (CheckCollisionRecs(goblinRect, leftSpikesRect)) {
                             SpawnParticles(goblins[i].position, LIME);
                             goblins[i].active = false;
@@ -298,7 +294,7 @@ int main(void) {
 
                         if (blockedByWall) {
                             if (goblins[i].moveDirY == 0) {
-                                goblins[i].moveDirY = (goblins[i].position.y > SCREEN_HEIGHT / 2) ? -1 : 1;
+                                goblins[i].moveDirY = (goblins[i].position.y > GAME_HEIGHT / 2) ? -1 : 1;
                             }
                             goblins[i].position.x -= scrollSpeed * deltaTime;
                         } else {
@@ -323,12 +319,11 @@ int main(void) {
                             goblins[i].position.y = RENDER_SIZE / 2;
                             goblins[i].moveDirY = 1;
                         }
-                        if (goblins[i].position.y > SCREEN_HEIGHT - RENDER_SIZE * 1.5f) {
-                            goblins[i].position.y = SCREEN_HEIGHT - RENDER_SIZE * 1.5f;
+                        if (goblins[i].position.y > GAME_HEIGHT - RENDER_SIZE * 1.5f) {
+                            goblins[i].position.y = GAME_HEIGHT - RENDER_SIZE * 1.5f;
                             goblins[i].moveDirY = -1;
                         }
 
-                        // 3. Goblin Dart Shooting
                         goblins[i].shootTimer += deltaTime;
                         if (goblins[i].shootTimer >= 1.2f) {
                             goblins[i].shootTimer = 0.0f;
@@ -361,13 +356,12 @@ int main(void) {
                     }
                 }
 
-                // Update Goal & Final Spike Wall
                 if (heartActive) {
                     heartPos.x -= scrollSpeed * deltaTime;
                     spikeWallX -= scrollSpeed * deltaTime;
 
                     Rectangle heartRect = { heartPos.x - RENDER_SIZE/2, heartPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
-                    Rectangle endSpikeRect = { spikeWallX - RENDER_SIZE/2, 0, RENDER_SIZE, SCREEN_HEIGHT };
+                    Rectangle endSpikeRect = { spikeWallX - RENDER_SIZE/2, 0, RENDER_SIZE, GAME_HEIGHT };
 
                     if (CheckCollisionRecs(playerRect, heartRect)) {
                         currentState = STATE_VICTORY;
@@ -386,81 +380,93 @@ int main(void) {
                 break;
         }
 
-        // --- DRAWING LOGIC ---
-        BeginDrawing();
-        ClearBackground(darkBrown);
+        // Render game graphics to internal 800x450 canvas
+        BeginTextureMode(target);
+            ClearBackground(darkBrown);
 
-        for (float x = groundOffset; x < SCREEN_WIDTH + RENDER_SIZE; x += RENDER_SIZE) {
-            DrawSpriteFrame(10, (Vector2){ x + RENDER_SIZE/2, SCREEN_HEIGHT - RENDER_SIZE/2 }, 0, false);
-        }
-
-        if (currentState == STATE_TITLE) {
-            DrawText("AXE RUNNER", SCREEN_WIDTH / 2 - MeasureText("AXE RUNNER", 40) / 2, 150, 40, RAYWHITE);
-            DrawText("Touch / Any key to start", SCREEN_WIDTH / 2 - MeasureText("Touch / Any key to start", 20) / 2, 250, 20, LIGHTGRAY);
-            DrawSpriteFrame(titleAnimFrame, (Vector2){ SCREEN_WIDTH / 2, 320 }, 0, false);
-        }
-        
-        else {
-            // Left Spikes (Flipped)
-            for (int y = 0; y < SCREEN_HEIGHT - RENDER_SIZE; y += RENDER_SIZE) {
-                DrawSpriteFrame(9, (Vector2){ RENDER_SIZE/2, y + RENDER_SIZE/2 }, 180.0f, false);
+            for (float x = groundOffset; x < GAME_WIDTH + RENDER_SIZE; x += RENDER_SIZE) {
+                DrawSpriteFrame(10, (Vector2){ x + RENDER_SIZE/2, GAME_HEIGHT - RENDER_SIZE/2 }, 0, false);
             }
 
-            // End Spike Wall
-            if (heartActive) {
-                DrawSpriteFrame(11, heartPos, 0, false);
-                for (int y = 0; y < SCREEN_HEIGHT - RENDER_SIZE; y += RENDER_SIZE) {
-                    DrawSpriteFrame(9, (Vector2){ spikeWallX, y + RENDER_SIZE/2 }, 0, false);
+            if (currentState == STATE_TITLE) {
+                DrawText("AXE RUNNER", GAME_WIDTH / 2 - MeasureText("AXE RUNNER", 40) / 2, 150, 40, RAYWHITE);
+                DrawText("Touch / Any key to start", GAME_WIDTH / 2 - MeasureText("Touch / Any key to start", 20) / 2, 250, 20, LIGHTGRAY);
+                DrawSpriteFrame(titleAnimFrame, (Vector2){ GAME_WIDTH / 2, 320 }, 0, false);
+            }
+            else {
+                for (int y = 0; y < GAME_HEIGHT - RENDER_SIZE; y += RENDER_SIZE) {
+                    DrawSpriteFrame(9, (Vector2){ RENDER_SIZE/2, y + RENDER_SIZE/2 }, 180.0f, false);
                 }
-            }
 
-            // Walls & Middle Spike Walls
-            for (int i = 0; i < MAX_WALLS; i++) {
-                if (walls[i].active) {
-                    int spriteIdx = walls[i].isSpike ? 9 : 6;
-                    for (int y = 0; y < walls[i].rect.height; y += RENDER_SIZE) {
-                        Vector2 wPos = { walls[i].rect.x + RENDER_SIZE/2, walls[i].rect.y + y + RENDER_SIZE/2 };
-                        DrawSpriteFrame(spriteIdx, wPos, 0, false);
+                if (heartActive) {
+                    DrawSpriteFrame(11, heartPos, 0, false);
+                    for (int y = 0; y < GAME_HEIGHT - RENDER_SIZE; y += RENDER_SIZE) {
+                        DrawSpriteFrame(9, (Vector2){ spikeWallX, y + RENDER_SIZE/2 }, 0, false);
                     }
                 }
-            }
 
-            // Goblins
-            for (int i = 0; i < MAX_GOBLINS; i++) {
-                if (goblins[i].active) DrawSpriteFrame(goblins[i].animFrame, goblins[i].position, 0, false);
-            }
+                for (int i = 0; i < MAX_WALLS; i++) {
+                    if (walls[i].active) {
+                        int spriteIdx = walls[i].isSpike ? 9 : 6;
+                        for (int y = 0; y < walls[i].rect.height; y += RENDER_SIZE) {
+                            Vector2 wPos = { walls[i].rect.x + RENDER_SIZE/2, walls[i].rect.y + y + RENDER_SIZE/2 };
+                            DrawSpriteFrame(spriteIdx, wPos, 0, false);
+                        }
+                    }
+                }
 
-            // Darts
-            for (int i = 0; i < MAX_DARTS; i++) {
-                if (darts[i].active) DrawRectangleV(darts[i].position, (Vector2){ 8, 4 }, PURPLE);
-            }
+                for (int i = 0; i < MAX_GOBLINS; i++) {
+                    if (goblins[i].active) DrawSpriteFrame(goblins[i].animFrame, goblins[i].position, 0, false);
+                }
 
-            // Axes
-            for (int i = 0; i < MAX_AXES; i++) {
-                if (axes[i].active) DrawSpriteFrame(12, axes[i].position, axes[i].rotation, false);
-            }
+                for (int i = 0; i < MAX_DARTS; i++) {
+                    if (darts[i].active) DrawRectangleV(darts[i].position, (Vector2){ 8, 4 }, PURPLE);
+                }
 
-            if (currentState == STATE_GAMEPLAY) DrawSpriteFrame(playerAnimFrame, playerPos, 0, false);
+                for (int i = 0; i < MAX_AXES; i++) {
+                    if (axes[i].active) DrawSpriteFrame(12, axes[i].position, axes[i].rotation, false);
+                }
 
-            // Particles (Red for Dwarf, Lime Green for Goblins)
-            for (int i = 0; i < MAX_PARTICLES; i++) {
-                if (particles[i].active) {
-                    DrawRectangleV(particles[i].position, (Vector2){ particles[i].size, particles[i].size }, ColorAlpha(particles[i].color, particles[i].alpha));
+                if (currentState == STATE_GAMEPLAY) DrawSpriteFrame(playerAnimFrame, playerPos, 0, false);
+
+                for (int i = 0; i < MAX_PARTICLES; i++) {
+                    if (particles[i].active) {
+                        DrawRectangleV(particles[i].position, (Vector2){ particles[i].size, particles[i].size }, ColorAlpha(particles[i].color, particles[i].alpha));
+                    }
+                }
+
+                if (currentState == STATE_GAMEOVER) {
+                    DrawText("GAME OVER", GAME_WIDTH / 2 - MeasureText("GAME OVER", 40) / 2, 180, 40, RED);
+                    DrawText("Touch / Press key to try again", GAME_WIDTH / 2 - MeasureText("Touch / Press key to try again", 20) / 2, 300, 20, LIGHTGRAY);
+                } else if (currentState == STATE_VICTORY) {
+                    DrawText("STAGE CLEARED!", GAME_WIDTH / 2 - MeasureText("STAGE CLEARED!", 40) / 2, 180, 40, GOLD);
+                    DrawText("Touch / Press key to play again", GAME_WIDTH / 2 - MeasureText("Touch / Press key to play again", 20) / 2, 300, 20, LIGHTGRAY);
                 }
             }
+        EndTextureMode();
 
-            if (currentState == STATE_GAMEOVER) {
-                DrawText("GAME OVER", SCREEN_WIDTH / 2 - MeasureText("GAME OVER", 40) / 2, 180, 40, RED);
-                DrawText("Touch / Press key to try again", SCREEN_WIDTH / 2 - MeasureText("Touch / Press key to try again", 20) / 2, 300, 20, LIGHTGRAY);
-            } else if (currentState == STATE_VICTORY) {
-                DrawText("STAGE CLEARED!", SCREEN_WIDTH / 2 - MeasureText("STAGE CLEARED!", 40) / 2, 180, 40, GOLD);
-                DrawText("Touch / Press key to play again", SCREEN_WIDTH / 2 - MeasureText("Touch / Press key to play again", 20) / 2, 300, 20, LIGHTGRAY);
-            }
-        }
+        // Scaled output to full screen dimensions with letterboxing
+        BeginDrawing();
+            ClearBackground(BLACK);
 
+            float screenW = (float)GetScreenWidth();
+            float screenH = (float)GetScreenHeight();
+
+            float scale = fminf(screenW / GAME_WIDTH, screenH / GAME_HEIGHT);
+
+            Rectangle srcRec = { 0.0f, 0.0f, (float)GAME_WIDTH, (float)-GAME_HEIGHT };
+            Rectangle destRec = {
+                (screenW - ((float)GAME_WIDTH * scale)) * 0.5f,
+                (screenH - ((float)GAME_HEIGHT * scale)) * 0.5f,
+                (float)GAME_WIDTH * scale,
+                (float)GAME_HEIGHT * scale
+            };
+
+            DrawTexturePro(target.texture, srcRec, destRec, (Vector2){ 0, 0 }, 0.0f, WHITE);
         EndDrawing();
     }
 
+    UnloadRenderTexture(target);
     UnloadTexture(spriteSheet);
     CloseWindow();
     return 0;
