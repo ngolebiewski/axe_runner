@@ -1,0 +1,81 @@
+name: Build and Deploy WASM Game
+
+on:
+  push:
+    branches: [ main ]
+
+# Grant permissions required for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up Emscripten toolchain
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v3
+        with:
+          version: 3.1.64
+
+      # Cache Raylib build
+      - name: Cache Raylib WASM
+        id: cache-raylib
+        uses: actions/cache@v4
+        with:
+          path: raylib/src/libraylib.a
+          key: raylib-wasm-v5.0
+
+      # Build Raylib for WASM if not cached
+      - name: Build Raylib for WASM
+        if: steps.cache-raylib.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/raysan5/raylib.git
+          cd raylib/src
+          make PLATFORM=PLATFORM_WEB -j$(nproc)
+
+      # Create output directory for web build
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      # Compile game into dist/
+      - name: Compile Game
+        run: |
+          emcc -o dist/index.html main.c raylib/src/libraylib.a \
+            -I. -Iraylib/src \
+            -s USE_GLFW=3 \
+            -s ASYNCIFY \
+            -s TOTAL_MEMORY=67108864 \
+            -s FORCE_FILESYSTEM=1 \
+            --embed-file axe_demo.png \
+            --shell-file raylib/src/shell.html \
+            -DPLATFORM_WEB -O2
+
+      # Setup GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      # Upload dist folder as artifact for Pages
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'dist'
+
+      # Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
