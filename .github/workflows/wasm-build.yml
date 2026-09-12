@@ -44,7 +44,7 @@ jobs:
         if: steps.cache-raylib.outputs.cache-hit != 'true'
         run: |
           cd raylib/src
-          emmake make PLATFORM=PLATFORM_WEB -B
+          make PLATFORM=PLATFORM_WEB -B
 
       - name: Create dist directory
         run: mkdir -p dist
