@@ -46,7 +46,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/raysan5/raylib.git
           cd raylib/src
-          make PLATFORM=PLATFORM_WEB -j$(nproc)
+          emake make PLATFORM=PLATFORM_WEB -j$(nproc)
 
       # Create output directory for web build
       - name: Create dist directory
