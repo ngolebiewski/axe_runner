@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <title>Axe Runner</title>
+    <meta name="title" content="Axe Runner">
+    <meta name="description" content="A dwarf, kicked to Hel by Thor, throws axes and dodges spikes trying to escape the dungeon and reach the heart.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Axe Runner">
+    <meta property="og:description" content="A dwarf, kicked to Hel by Thor, throws axes and dodges spikes trying to escape the dungeon and reach the heart.">
+    <meta property="og:image" content="axe.png">
+
+    <link rel="shortcut icon" href="axe.png" type="image/png">
+
+    <style>
+      /* Self-hosted Alagard — the gothic pixel font used throughout raylib's
+         own text examples. Put alagard.ttf (or .woff2) in the repo root
+         next to shell.html for this to actually load; falls back to a
+         generic serif until then / if it's missing. */
+      @font-face {
+        font-family: 'Alagard';
+        src: url('alagard.woff2') format('woff2'),
+             url('alagard.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0d0b0a;
+        overflow: hidden;
+      }
+
+      #game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      canvas.emscripten {
+        border: 0px none;
+        background-color: #000;
+        image-rendering: pixelated;
+        max-width: 100%;
+        max-height: 100%;
+        outline: none;
+      }
+
+      canvas.emscripten.hidden {
+        display: none;
+      }
+
+      #loading-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, #241512 0%, #0d0b0a 70%);
+        color: #e8c48a;
+        text-align: center;
+        z-index: 10;
+        font-family: 'Trebuchet MS', Verdana, sans-serif;
+      }
+
+      #loading-screen h1 {
+        font-family: 'Alagard', 'Trebuchet MS', serif;
+        font-size: 2.6rem;
+        font-weight: normal;
+        letter-spacing: 0.1em;
+        color: #d84b2a;
+        text-shadow: 0 0 12px rgba(216, 75, 42, 0.6);
+        margin-bottom: 0.2em;
+      }
+
+      #loading-screen p.tagline {
+        color: #b8a184;
+        font-size: 0.95rem;
+        margin-top: 0;
+        margin-bottom: 2em;
+        max-width: 26em;
+        line-height: 1.4em;
+      }
+
+      /* The game's own axe sprite, used as the spinner, rendered crisp
+         (not blurred) and given a soft glow to match the rest of the UI */
+      #axe-spinner {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1.5em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: spin 1.1s linear infinite;
+        filter: drop-shadow(0 0 8px rgba(216, 75, 42, 0.7));
+      }
+      #axe-spinner img {
+        width: 128px;
+        height: 128px;
+        image-rendering: pixelated;
+        display: block;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      #loading-bar-outer {
+        width: 240px;
+        height: 10px;
+        border: 1px solid #6b4b3a;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #1c1310;
+        box-shadow: 0 0 8px rgba(216, 75, 42, 0.25);
+      }
+      #loading-bar-inner {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #7a2f1a, #d84b2a);
+        box-shadow: 0 0 10px rgba(216, 75, 42, 0.6);
+        transition: width 0.15s ease-out;
+      }
+      #loading-status {
+        margin-top: 0.75em;
+        font-size: 0.8rem;
+        color: #8a7460;
+        letter-spacing: 0.05em;
+      }
+
+      #output {
+        display: none; /* flip to block for on-page debug console */
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        max-height: 25%;
+        overflow-y: auto;
+        background: rgba(0,0,0,0.8);
+        color: #9fdb9f;
+        font-family: monospace;
+        font-size: 11px;
+        padding: 4px 8px;
+        box-sizing: border-box;
+        z-index: 20;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <div id="loading-screen">
+        <div id="axe-spinner"><img src="axe.png" alt=""></div>
+        <h1>Axe Runner</h1>
+        <p class="tagline">Kicked to Hel by Thor. Dodge the spikes. Don't go splat.</p>
+        <div id="loading-bar-outer">
+          <div id="loading-bar-inner"></div>
+        </div>
+        <div id="loading-status">Loading&hellip;</div>
+      </div>
+
+      <canvas class="emscripten hidden" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    </div>
+
+    <pre id="output"></pre>
+
+    <script>
+      var loadingScreen = document.getElementById('loading-screen');
+      var loadingBarInner = document.getElementById('loading-bar-inner');
+      var loadingStatus = document.getElementById('loading-status');
+      var canvasEl = document.getElementById('canvas');
+
+      var Module = {
+        print: (function () {
+          var element = document.getElementById('output');
+          return function (text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            console.log(text);
+            if (element) {
+              element.textContent += text + "\n";
+              element.scrollTop = element.scrollHeight;
+            }
+          };
+        })(),
+        printErr: function (text) {
+          console.error(text);
+        },
+        canvas: (function () {
+          return canvasEl;
+        })(),
+        setStatus: function (text) {
+          if (!text) {
+            loadingStatus.textContent = 'Ready';
+            return;
+          }
+          loadingStatus.textContent = text;
+          var match = text.match(/\((\d+(\.\d+)?)\/(\d+)\)/);
+          if (match) {
+            var pct = (parseInt(match[1]) / parseInt(match[3])) * 100;
+            loadingBarInner.style.width = pct + '%';
+          }
+        },
+        monitorRunDependencies: function (left) {
+          if (left === 0) {
+            loadingBarInner.style.width = '100%';
+          }
+        },
+        onRuntimeInitialized: function () {
+          loadingScreen.style.display = 'none';
+          canvasEl.classList.remove('hidden');
+          canvasEl.focus();
+        }
+      };
+
+      window.onerror = function (event) {
+        loadingStatus.textContent = 'Something went wrong loading the game — check the console.';
+        console.log("Uncaught error:", event);
+      };
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>

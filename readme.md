@@ -4,8 +4,12 @@ A game experiment in Raylib and C. Thinking about up/down only controls and an a
 
 You are a Dwarf, kicked to Hel by Thor, trying to escape the dungeon and its denizens... Avoid the spikes and don't go splat.
 
-Art by me in Aseprite.
-Code with a bit of AI assist.
+## Credits
+- Art by me in Aseprite.
+- Code with a bit of AI assist.
+- Engine: Raylib
+- HTML Loadup Font: Alagard € by Hewett Tsoi
+
 
 ### Build
 ```bash

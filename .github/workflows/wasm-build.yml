@@ -57,8 +57,13 @@ jobs:
             -s TOTAL_MEMORY=67108864 \
             -s FORCE_FILESYSTEM=1 \
             --embed-file axe_demo.png \
-            --shell-file raylib/src/shell.html \
+            --shell-file shell.html \
             -DPLATFORM_WEB -O2
+
+      - name: Copy static assets
+        run: |
+          cp axe.png dist/ 2>/dev/null || true
+          cp alagard.* dist/ 2>/dev/null || true
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
