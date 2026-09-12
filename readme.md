@@ -7,8 +7,8 @@ You are a Dwarf, kicked to Hel by Thor, trying to escape the dungeon and its den
 ## Credits
 - Art by me in Aseprite.
 - Code with a bit of AI assist.
-- Engine: Raylib
-- HTML Loadup Font: Alagard € by Hewett Tsoi
+- Engine: Raylib: https://www.raylib.com/
+- HTML Loadup Font: Alagard € by Hewett Tsoi https://www.dafont.com/alagard.font
 
 
 ### Build

@@ -146,6 +146,16 @@ int main(void) {
                 if (IsKeyDown(KEY_UP))   playerPos.y -= playerSpeed * deltaTime;
                 if (IsKeyDown(KEY_DOWN)) playerPos.y += playerSpeed * deltaTime;
 
+                // Touch / mouse control: hold top half of screen to go up,
+                // bottom half to go down (also works with a mouse for desktop testing)
+                if (GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                    Vector2 touchPos = (GetTouchPointCount() > 0) ? GetTouchPosition(0) : GetMousePosition();
+                    float screenMidY = GetScreenHeight() / 2.0f;
+
+                    if (touchPos.y < screenMidY) playerPos.y -= playerSpeed * deltaTime;
+                    else                          playerPos.y += playerSpeed * deltaTime;
+                }
+
                 if (playerPos.y < RENDER_SIZE / 2) playerPos.y = RENDER_SIZE / 2;
                 if (playerPos.y > GAME_HEIGHT - RENDER_SIZE * 1.5f) playerPos.y = GAME_HEIGHT - RENDER_SIZE * 1.5f;
 
