@@ -29,16 +29,15 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Cache Raylib WASM build
+      - name: Clone Raylib source
+        run: git clone --depth 1 https://github.com/raysan5/raylib.git
+
+      - name: Cache Raylib WASM lib
         id: cache-raylib
         uses: actions/cache@v4
         with:
-          path: raylib
-          key: raylib-wasm-${{ runner.os }}-v1
-
-      - name: Checkout Raylib source
-        if: steps.cache-raylib.outputs.cache-hit != 'true'
-        run: git clone --depth 1 https://github.com/raysan5/raylib.git
+          path: raylib/src/libraylib.web.a
+          key: raylib-wasm-v3-${{ runner.os }}
 
       - name: Build Raylib for WASM
         if: steps.cache-raylib.outputs.cache-hit != 'true'
@@ -51,7 +50,7 @@ jobs:
 
       - name: Compile Game
         run: |
-          emcc -o dist/index.html main.c raylib/src/libraylib.a \
+          emcc -o dist/index.html main.c raylib/src/libraylib.web.a \
             -I. -Iraylib/src \
             -s USE_GLFW=3 \
             -s ASYNCIFY \
