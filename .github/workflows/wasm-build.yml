@@ -30,7 +30,7 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v3
         with:
-          version: 3.1.64
+          version: 'latest'
 
       # Cache Raylib build
       - name: Cache Raylib WASM
