@@ -23,7 +23,7 @@ typedef enum {
 
 typedef struct { Vector2 position; Vector2 velocity; float rotation; bool active; } Axe;
 typedef struct { Vector2 position; Vector2 velocity; bool active; } Dart;
-typedef struct { Vector2 position; bool active; float shootTimer; int animFrame; float animTimer; int moveDirY; } Goblin;
+typedef struct { Vector2 position; bool active; bool isDead; float shootTimer; int animFrame; float animTimer; int moveDirY; } Goblin;
 typedef struct { Rectangle rect; bool active; bool isSpike; } Wall;
 typedef struct { Vector2 position; Vector2 velocity; float size; float alpha; Color color; bool active; } Particle;
 
@@ -75,12 +75,13 @@ void ResetGame(void) {
     for (int i = 0; i < MAX_PARTICLES; i++) particles[i].active = false;
 
     walls[0] = (Wall){ (Rectangle){ 600, 100, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
-    walls[1] = (Wall){ (Rectangle){ 900, 250, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
-    walls[2] = (Wall){ (Rectangle){ 1200, 50, RENDER_SIZE, RENDER_SIZE * 4 }, true, true };
+    walls[1] = (Wall){ (Rectangle){ 900, 300, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
+    walls[2] = (Wall){ (Rectangle){ 1100, 0, RENDER_SIZE, RENDER_SIZE * 7 }, true, false };
+    walls[3] = (Wall){ (Rectangle){ 1250, 300, RENDER_SIZE, RENDER_SIZE * 2 }, true, true };
 
-    goblins[0] = (Goblin){ (Vector2){ 750, 150 }, true, 0.0f, 7, 0.0f, 0 };
-    goblins[1] = (Goblin){ (Vector2){ 1050, 300 }, true, 0.0f, 7, 0.0f, 0 };
-    goblins[2] = (Goblin){ (Vector2){ 450, 200 }, true, 0.0f, 7, 0.0f, 0 };
+    goblins[0] = (Goblin){ (Vector2){ 750, 150 }, true, false, 0.0f, 7, 0.0f, 0 };
+    goblins[1] = (Goblin){ (Vector2){ 1050, 300 }, true, false, 0.0f, 7, 0.0f, 0 };
+    goblins[2] = (Goblin){ (Vector2){ 450, 200 }, true, false, 0.0f, 7, 0.0f, 0 };
 
     heartPos = (Vector2){ 1500, GAME_HEIGHT / 2.0f };
     heartActive = true;
@@ -115,7 +116,6 @@ int main(void) {
             ToggleFullscreen();
         }
 
-        // Particle System Update
         for (int i = 0; i < MAX_PARTICLES; i++) {
             if (particles[i].active) {
                 particles[i].position.x += particles[i].velocity.x * deltaTime;
@@ -143,17 +143,33 @@ int main(void) {
                 groundOffset -= scrollSpeed * deltaTime;
                 if (groundOffset <= -RENDER_SIZE) groundOffset += RENDER_SIZE;
 
-                if (IsKeyDown(KEY_UP))   playerPos.y -= playerSpeed * deltaTime;
-                if (IsKeyDown(KEY_DOWN)) playerPos.y += playerSpeed * deltaTime;
+                float moveY = 0.0f;
+                if (IsKeyDown(KEY_UP)) moveY -= playerSpeed * deltaTime;
+                if (IsKeyDown(KEY_DOWN)) moveY += playerSpeed * deltaTime;
 
-                // Touch / mouse control: hold top half of screen to go up,
-                // bottom half to go down (also works with a mouse for desktop testing)
                 if (GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                     Vector2 touchPos = (GetTouchPointCount() > 0) ? GetTouchPosition(0) : GetMousePosition();
                     float screenMidY = GetScreenHeight() / 2.0f;
 
-                    if (touchPos.y < screenMidY) playerPos.y -= playerSpeed * deltaTime;
-                    else                          playerPos.y += playerSpeed * deltaTime;
+                    if (touchPos.y < screenMidY) moveY -= playerSpeed * deltaTime;
+                    else                         moveY += playerSpeed * deltaTime;
+                }
+
+                if (moveY != 0.0f) {
+                    float newY = playerPos.y + moveY;
+                    Rectangle verticalTestRect = { playerPos.x - RENDER_SIZE/2, newY - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
+                    bool verticalBlocked = false;
+
+                    for (int w = 0; w < MAX_WALLS; w++) {
+                        if (walls[w].active && !walls[w].isSpike && CheckCollisionRecs(verticalTestRect, walls[w].rect)) {
+                            verticalBlocked = true;
+                            break;
+                        }
+                    }
+
+                    if (!verticalBlocked) {
+                        playerPos.y = newY;
+                    }
                 }
 
                 if (playerPos.y < RENDER_SIZE / 2) playerPos.y = RENDER_SIZE / 2;
@@ -254,6 +270,18 @@ int main(void) {
 
                 for (int i = 0; i < MAX_GOBLINS; i++) {
                     if (goblins[i].active) {
+                        Rectangle leftSpikesRect = { 0, 0, RENDER_SIZE, GAME_HEIGHT };
+
+                        if (goblins[i].isDead) {
+                            goblins[i].position.x -= scrollSpeed * deltaTime;
+                            Rectangle deadGoblinRect = { goblins[i].position.x - RENDER_SIZE/2, goblins[i].position.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
+                            if (CheckCollisionRecs(deadGoblinRect, leftSpikesRect)) {
+                                SpawnParticles(goblins[i].position, LIME);
+                                goblins[i].active = false;
+                            }
+                            continue;
+                        }
+
                         goblins[i].animTimer += deltaTime;
                         if (goblins[i].animTimer >= 0.15f) {
                             goblins[i].animTimer = 0.0f;
@@ -274,10 +302,10 @@ int main(void) {
 
                         Rectangle goblinRect = { nextPos.x - RENDER_SIZE/2, nextPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
 
-                        Rectangle leftSpikesRect = { 0, 0, RENDER_SIZE, GAME_HEIGHT };
                         if (CheckCollisionRecs(goblinRect, leftSpikesRect)) {
                             SpawnParticles(goblins[i].position, LIME);
-                            goblins[i].active = false;
+                            goblins[i].isDead = true;
+                            goblins[i].animFrame = 16;
                             continue;
                         }
 
@@ -298,7 +326,8 @@ int main(void) {
 
                         if (hitSpikeWall) {
                             SpawnParticles(goblins[i].position, LIME);
-                            goblins[i].active = false;
+                            goblins[i].isDead = true;
+                            goblins[i].animFrame = 16;
                             continue;
                         }
 
@@ -357,7 +386,8 @@ int main(void) {
                                 Vector2 axeCenter = axes[j].position;
                                 if (CheckCollisionCircleRec(axeCenter, RENDER_SIZE / 3, goblinRect)) {
                                     SpawnParticles(goblins[i].position, LIME);
-                                    goblins[i].active = false;
+                                    goblins[i].isDead = true;
+                                    goblins[i].animFrame = 16;
                                     axes[j].active = false;
                                     break;
                                 }
@@ -390,7 +420,6 @@ int main(void) {
                 break;
         }
 
-        // Render game graphics to internal 800x450 canvas
         BeginTextureMode(target);
             ClearBackground(darkBrown);
 
@@ -455,7 +484,6 @@ int main(void) {
             }
         EndTextureMode();
 
-        // Scaled output to full screen dimensions with letterboxing
         BeginDrawing();
             ClearBackground(BLACK);
 
