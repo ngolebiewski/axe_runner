@@ -13,6 +13,7 @@
 #define MAX_WALLS 10
 #define MAX_PARTICLES 120
 #define MAX_DARTS 20
+#define SOUND true
 
 typedef enum {
     STATE_TITLE,
@@ -91,7 +92,24 @@ void ResetGame(void) {
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(GAME_WIDTH, GAME_HEIGHT, "Axe Runner");
+    
+    InitAudioDevice();
+
+    Sound fx1up = LoadSound("sound/1up.wav");
+    Sound fxScreamMike = LoadSound("sound/screamMike.wav");
+    SetSoundVolume(fxScreamMike, 0.3f);
+    Sound fxNoiseWave = LoadSound("sound/sfx_4_downsweep.wav");
+    SetSoundVolume(fxNoiseWave, 0.6f);
+
+    //init the music stream for the looping background music;
+    Music musicDirge = LoadMusicStream("sound/song_loop.wav");
+    float timePlayed = 0.0f;        // Time played normalized [0.0f..1.0f]
+    float volume = 0.8f;
+    SetMusicVolume(musicDirge, volume);
+    // Start playing the stream ONCe before the game loop
+    if (SOUND) PlayMusicStream(musicDirge);
     SetTargetFPS(60);
+    
 
     spriteSheet = LoadTexture("axe_demo.png");
 
@@ -115,6 +133,12 @@ int main(void) {
         if (IsKeyPressed(KEY_F)) {
             ToggleFullscreen();
         }
+
+        // Play some background music!
+        // Later on, add this to each switch case so each level can have a different tune.
+        UpdateMusicStream(musicDirge);
+        timePlayed = GetMusicTimePlayed(musicDirge)/GetMusicTimeLength(musicDirge);
+        if (timePlayed > 1.0f) timePlayed = 1.0f;
 
         for (int i = 0; i < MAX_PARTICLES; i++) {
             if (particles[i].active) {
@@ -233,6 +257,7 @@ int main(void) {
                         Rectangle playerRect = { playerPos.x - RENDER_SIZE/2, playerPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
                         if (darts[i].active && CheckCollisionRecs(playerRect, dartRect)) {
                             SpawnParticles(playerPos, RED);
+                            PlaySound(fxNoiseWave);
                             currentState = STATE_GAMEOVER;
                         }
 
@@ -250,6 +275,7 @@ int main(void) {
                         if (CheckCollisionRecs(playerRect, walls[i].rect)) {
                             if (walls[i].isSpike) {
                                 SpawnParticles(playerPos, RED);
+                                PlaySound(fxNoiseWave);
                                 currentState = STATE_GAMEOVER;
                             } else {
                                 playerPos.x = walls[i].rect.x - RENDER_SIZE / 2;
@@ -265,6 +291,7 @@ int main(void) {
 
                 if (playerPos.x - RENDER_SIZE / 2 <= 0) {
                     SpawnParticles(playerPos, RED);
+                    PlaySound(fxNoiseWave);
                     currentState = STATE_GAMEOVER;
                 }
 
@@ -378,6 +405,7 @@ int main(void) {
 
                         if (CheckCollisionRecs(playerRect, goblinRect)) {
                             SpawnParticles(playerPos, RED);
+                            PlaySound(fxNoiseWave);
                             currentState = STATE_GAMEOVER;
                         }
 
@@ -386,6 +414,7 @@ int main(void) {
                                 Vector2 axeCenter = axes[j].position;
                                 if (CheckCollisionCircleRec(axeCenter, RENDER_SIZE / 3, goblinRect)) {
                                     SpawnParticles(goblins[i].position, LIME);
+                                    PlaySound(fxScreamMike);
                                     goblins[i].isDead = true;
                                     goblins[i].animFrame = 16;
                                     axes[j].active = false;
@@ -404,9 +433,11 @@ int main(void) {
                     Rectangle endSpikeRect = { spikeWallX - RENDER_SIZE/2, 0, RENDER_SIZE, GAME_HEIGHT };
 
                     if (CheckCollisionRecs(playerRect, heartRect)) {
-                        currentState = STATE_VICTORY;
+                      if (SOUND) PlaySound(fx1up); // Play 1up WAV sound 
+                      currentState = STATE_VICTORY;
                     } else if (CheckCollisionRecs(playerRect, endSpikeRect)) {
                         SpawnParticles(playerPos, RED);
+                        PlaySound(fxNoiseWave);
                         currentState = STATE_GAMEOVER;
                     }
                 }
@@ -503,7 +534,14 @@ int main(void) {
             DrawTexturePro(target.texture, srcRec, destRec, (Vector2){ 0, 0 }, 0.0f, WHITE);
         EndDrawing();
     }
+    // De-Initialization
+    //--------------------------------------------------------------------------------------
+    UnloadSound(fx1up); // unloads the sound data initialized in main
+    UnloadSound(fxScreamMike);
 
+    UnloadMusicStream(musicDirge);
+    CloseAudioDevice(); // finish audio cleanup
+  
     UnloadRenderTexture(target);
     UnloadTexture(spriteSheet);
     CloseWindow();

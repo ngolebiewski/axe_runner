@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Retro Audio WAV Exporter</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #111; color: #fff; }
+    button { padding: 10px 16px; margin: 8px 4px; font-size: 14px; cursor: pointer; }
+    .card { border: 1px solid #333; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Retro Audio WAV Exporter</h1>
+  
+  <div class="card">
+    <h2>Music Loop</h2>
+    <button id="btn-song">Download Song Loop (.wav)</button>
+  </div>
+
+  <div class="card">
+    <h2>Sound Effects Presets</h2>
+    <button id="btn-sfx1">Download SFX 1 (Low Rumble)</button>
+    <button id="btn-sfx2">Download SFX 2 (Blip / Hit)</button>
+    <button id="btn-sfx3">Download SFX 3 (Laser Zap)</button>
+    <button id="btn-sfx4">Download SFX 4 (Mega Downsweep)</button>
+    <button id="btn-sfx-axe">Download SFX 5 (Axe Hit / Dying Groan)</button>
+  </div>
+
+  <script type="module">
+    // Frequencies (Hz)
+    const N = {
+      Bb1: 58.27,  Eb2: 77.78,  E2: 82.41,  F2: 87.31,  Gb2: 92.50,  G2: 98.00,
+      Bb2: 116.54, Eb3: 155.56, E3: 164.81, F3: 174.61, Gb3: 185.00, G3: 196.00,
+      Bb3: 233.08, B3:  246.94, C4: 261.63, Db4: 277.18, D4: 293.66, Eb4: 311.13,
+      E4:  329.63, F4:  349.23, Gb4: 369.99, G4: 392.00, Ab4: 415.30, A4: 440.00, Bb4: 466.16,
+      C5:  523.25, Db5: 554.37, Eb5: 622.25, F5: 698.46
+    };
+
+    const PWR = {
+      G5:  [N.G3, N.D4, N.G4],
+      Gb5: [N.Gb3, N.Db4, N.Gb4],
+      F5:  [N.F3, N.C4, N.F4],
+      E5:  [N.E3, N.B3, N.E4]
+    };
+
+    const EbMinArp  = [N.Eb4, N.Gb4, N.Bb4, N.Eb5, N.Bb4, N.Gb4, N.Eb4, N.Gb4];
+    const FMajArp   = [N.F4,  N.A4,  N.C5,  N.F5,  N.C5,  N.A4,  N.F4,  N.A4];
+    const BbMin9Arp = [N.Bb3, N.Db4, N.F4,  N.Ab4, N.C5,  N.Ab4, N.F4,  N.Db4];
+
+    const BEAT = 60 / 90;
+
+    const SEQUENCE = [
+      ...EbMinArp.map(note => [note, N.Eb2]),
+      ...FMajArp.map(note => [note, N.F2]),
+      ...EbMinArp.map(note => [note, N.Eb2]),
+      ...BbMin9Arp.map(note => [note, N.Bb1]),
+      [PWR.G5,  N.G2],  [PWR.G5,  N.G2],
+      [PWR.Gb5, N.Gb2], [PWR.Gb5, N.Gb2],
+      [PWR.F5,  N.F2],  [PWR.F5,  N.F2],
+      [PWR.E5,  N.E2],  [PWR.E5,  N.E2]
+    ];
+
+    function audioBufferToWav(audioBuffer) {
+      const numChannels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const bitDepth = 16;
+      const samples = audioBuffer.length;
+      const blockAlign = numChannels * (bitDepth / 8);
+      const byteRate = sampleRate * blockAlign;
+      const dataSize = samples * blockAlign;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      const writeString = (offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      };
+
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, bitDepth, true);
+      writeString(36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      let offset = 44;
+      const channelData = [];
+      for (let c = 0; c < numChannels; c++) {
+        channelData.push(audioBuffer.getChannelData(c));
+      }
+
+      for (let i = 0; i < samples; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          let s = Math.max(-1, Math.min(1, channelData[c][i]));
+          s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          view.setInt16(offset, s, true);
+          offset += 2;
+        }
+      }
+
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function bakeSong() {
+      const totalDuration = SEQUENCE.length * BEAT;
+      const sampleRate = 22050;
+      const offlineCtx = new OfflineAudioContext(1, sampleRate * totalDuration, sampleRate);
+
+      const bassOsc = offlineCtx.createOscillator();
+      const bassGain = offlineCtx.createGain();
+      bassOsc.type = 'triangle';
+      bassGain.gain.setValueAtTime(0.25, 0);
+      bassOsc.connect(bassGain);
+      bassGain.connect(offlineCtx.destination);
+      bassOsc.start(0);
+
+      SEQUENCE.forEach(([melodyItem, rootFreq], index) => {
+        const time = index * BEAT;
+        bassOsc.frequency.setTargetAtTime(rootFreq, time, 0.05);
+
+        const freqs = Array.isArray(melodyItem) ? melodyItem : [melodyItem];
+        const isPowerChord = freqs.length > 1;
+
+        const gain = offlineCtx.createGain();
+        const volume = isPowerChord ? 0.08 : 0.12;
+
+        gain.gain.setValueAtTime(volume, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + BEAT * 0.9);
+        gain.connect(offlineCtx.destination);
+
+        freqs.forEach(freq => {
+          if (!freq) return;
+          const osc = offlineCtx.createOscillator();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(freq, time);
+          osc.connect(gain);
+          osc.start(time);
+          osc.stop(time + BEAT * 0.9);
+        });
+      });
+
+      return await offlineCtx.startRendering();
+    }
+
+    async function renderNoise({ duration = 0.2, frequency = 1.0, pitchSweep = 0.0, volume = 0.2 } = {}) {
+      const sampleRate = 22050;
+      const offlineCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * duration), sampleRate);
+      
+      const bufferSize = offlineCtx.sampleRate;
+      const noiseBuff = offlineCtx.createBuffer(1, bufferSize, offlineCtx.sampleRate);
+      const output = noiseBuff.getChannelData(0);
+      
+      let lfsr = 0x7fff;
+      for (let i = 0; i < bufferSize; i++) {
+        const bit = ((lfsr >> 0) ^ (lfsr >> 1)) & 1;
+        lfsr = (lfsr >> 1) | (bit << 14);
+        output[i] = (lfsr & 1) ? 1 : -1;
+      }
+
+      const source = offlineCtx.createBufferSource();
+      const gain = offlineCtx.createGain();
+
+      source.buffer = noiseBuff;
+
+      source.playbackRate.setValueAtTime(frequency, 0);
+      if (pitchSweep !== 0) {
+        const targetFreq = Math.max(0.01, frequency + pitchSweep);
+        source.playbackRate.linearRampToValueAtTime(targetFreq, duration);
+      }
+
+      gain.gain.setValueAtTime(volume, 0);
+      gain.gain.exponentialRampToValueAtTime(0.001, duration);
+
+      source.connect(gain);
+      gain.connect(offlineCtx.destination);
+
+      source.start(0);
+      source.stop(duration);
+
+      return await offlineCtx.startRendering();
+    }
+
+    // Custom compound renderer for axe impact + low groan
+    async function renderAxeDyingGroan() {
+      const duration = 0.85;
+      const sampleRate = 22050;
+      const offlineCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * duration), sampleRate);
+
+      // 1. Heavy Impact Noise (Axe Cleave)
+      const bufferSize = offlineCtx.sampleRate;
+      const noiseBuff = offlineCtx.createBuffer(1, bufferSize, offlineCtx.sampleRate);
+      const output = noiseBuff.getChannelData(0);
+      let lfsr = 0x7fff;
+      for (let i = 0; i < bufferSize; i++) {
+        const bit = ((lfsr >> 0) ^ (lfsr >> 1)) & 1;
+        lfsr = (lfsr >> 1) | (bit << 14);
+        output[i] = (lfsr & 1) ? 1 : -1;
+      }
+
+      const noiseSource = offlineCtx.createBufferSource();
+      const noiseGain = offlineCtx.createGain();
+      noiseSource.buffer = noiseBuff;
+      noiseSource.playbackRate.setValueAtTime(0.6, 0);
+      noiseSource.playbackRate.exponentialRampToValueAtTime(0.1, 0.15);
+      noiseGain.gain.setValueAtTime(0.4, 0);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, 0.2);
+      noiseSource.connect(noiseGain);
+      noiseGain.connect(offlineCtx.destination);
+      noiseSource.start(0);
+      noiseSource.stop(0.2);
+
+      // 2. Low Groan Oscillators (Dying Vocalization)
+      const osc1 = offlineCtx.createOscillator();
+      const osc2 = offlineCtx.createOscillator();
+      const groanGain = offlineCtx.createGain();
+
+      osc1.type = 'sawtooth';
+      osc2.type = 'triangle';
+
+      // Pitch starts low and sags down (groan effect)
+      osc1.frequency.setValueAtTime(120, 0.05);
+      osc1.frequency.exponentialRampToValueAtTime(45, duration);
+
+      osc2.frequency.setValueAtTime(123, 0.05); // slight detune for gritty beat frequency
+      osc2.frequency.exponentialRampToValueAtTime(43, duration);
+
+      groanGain.gain.setValueAtTime(0.001, 0);
+      groanGain.gain.linearRampToValueAtTime(0.35, 0.08); // swell right after hit
+      groanGain.gain.exponentialRampToValueAtTime(0.001, duration);
+
+      osc1.connect(groanGain);
+      osc2.connect(groanGain);
+      groanGain.connect(offlineCtx.destination);
+
+      osc1.start(0.05);
+      osc2.start(0.05);
+      osc1.stop(duration);
+      osc2.stop(duration);
+
+      return await offlineCtx.startRendering();
+    }
+
+    // UI Event Handlers
+    document.getElementById('btn-song').onclick = async () => {
+      const buffer = await bakeSong();
+      downloadBlob(audioBufferToWav(buffer), 'song_loop.wav');
+    };
+
+    document.getElementById('btn-sfx1').onclick = async () => {
+      const buffer = await renderNoise({ duration: 0.5, frequency: 0.2, pitchSweep: -0.15, volume: 0.3 });
+      downloadBlob(audioBufferToWav(buffer), 'sfx_1_rumble.wav');
+    };
+
+    document.getElementById('btn-sfx2').onclick = async () => {
+      const buffer = await renderNoise({ duration: 0.08, frequency: 2.2, volume: 0.15 });
+      downloadBlob(audioBufferToWav(buffer), 'sfx_2_blip.wav');
+    };
+
+    document.getElementById('btn-sfx3').onclick = async () => {
+      const buffer = await renderNoise({ duration: 0.15, frequency: 1.8, pitchSweep: -1.4, volume: 0.2 });
+      downloadBlob(audioBufferToWav(buffer), 'sfx_3_laser.wav');
+    };
+
+    document.getElementById('btn-sfx4').onclick = async () => {
+      const buffer = await renderNoise({ duration: 2.0, frequency: 1.0, pitchSweep: -20, volume: 0.4 });
+      downloadBlob(audioBufferToWav(buffer), 'sfx_4_downsweep.wav');
+    };
+
+    document.getElementById('btn-sfx-axe').onclick = async () => {
+      const buffer = await renderAxeDyingGroan();
+      downloadBlob(audioBufferToWav(buffer), 'sfx_axe_groan.wav');
+    };
+  </script>
+</body>
+</html>
