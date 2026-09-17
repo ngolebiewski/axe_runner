@@ -79,6 +79,7 @@
       text-align: center;
       z-index: 10;
       font-family: 'Trebuchet MS', Verdana, sans-serif;
+      cursor: pointer;
     }
 
     #loading-screen h1 {
@@ -155,6 +156,31 @@
       letter-spacing: 0.05em;
     }
 
+    #start-btn {
+      display: none;
+      margin-top: 1em;
+      padding: 0.6em 1.4em;
+      font-family: 'Alagard', 'Trebuchet MS', serif;
+      font-size: 1.3rem;
+      color: #f7e2bd;
+      background: #7a2f1a;
+      border: 2px solid #d84b2a;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(216, 75, 42, 0.5);
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    #start-btn:hover {
+      background: #993a20;
+      border-color: #f7e2bd;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); box-shadow: 0 0 8px rgba(216, 75, 42, 0.4); }
+      to { transform: scale(1.05); box-shadow: 0 0 16px rgba(216, 75, 42, 0.8); }
+    }
+
     #output {
       display: none;
       /* flip to block for on-page debug console */
@@ -186,6 +212,7 @@
         <div id="loading-bar-inner"></div>
       </div>
       <div id="loading-status">Loading&hellip;</div>
+      <button id="start-btn">CLICK TO PLAY</button>
     </div>
 
     <canvas class="emscripten hidden" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
@@ -195,15 +222,17 @@
 
   <script>
     var loadingScreen = document.getElementById('loading-screen');
+    var loadingBarOuter = document.getElementById('loading-bar-outer');
     var loadingBarInner = document.getElementById('loading-bar-inner');
     var loadingStatus = document.getElementById('loading-status');
+    var startBtn = document.getElementById('start-btn');
     var canvasEl = document.getElementById('canvas');
 
-    // Tracks WASM binary loading state
     var isWasmReady = false;
     var minTimeElapsed = false;
+    var isReadyToStart = false;
 
-    // 1. Enforce a minimum 2-second timeout to display the spinning axe animation
+    // Enforce 2-second minimum animation timeout
     setTimeout(function () {
       minTimeElapsed = true;
       checkLaunchReady();
@@ -211,33 +240,34 @@
 
     function checkLaunchReady() {
       if (isWasmReady && minTimeElapsed) {
-        loadingScreen.style.display = 'none';
-        canvasEl.classList.remove('hidden');
-        canvasEl.focus();
+        isReadyToStart = true;
+        loadingBarOuter.style.display = 'none';
+        loadingStatus.style.display = 'none';
+        startBtn.style.display = 'inline-block';
       }
     }
 
-    // 2. Resume WebAudio AudioContext on first user interaction
-    function resumeAudioContext() {
-      // Emscripten exposes the active WebAudio context via Module.AL.ALAudioContext or webAudioContext
-      var audioCtx = (typeof Module !== 'undefined' && Module.AL && Module.AL.ALAudioContext)
-        || window.webAudioContext;
+    function startGame() {
+      if (!isReadyToStart) return;
 
-      if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume().then(function () {
-          console.log('AudioContext resumed successfully via user interaction.');
-        });
+      // Unlocks raylib's WebAudio AudioContext upon explicit click/tap gesture
+      if (typeof emscriptenRegisterAudioObject !== 'undefined' || typeof Module !== 'undefined') {
+        var audioCtx = (Module.AL && Module.AL.ALAudioContext) || window.webAudioContext;
+        if (!audioCtx && typeof AL !== 'undefined') audioCtx = AL.currentContext ? AL.currentContext.audioCtx : null;
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
       }
 
-      // Remove event listeners after the first interaction unlocks audio
-      window.removeEventListener('click', resumeAudioContext);
-      window.removeEventListener('keydown', resumeAudioContext);
-      window.removeEventListener('touchstart', resumeAudioContext);
+      loadingScreen.style.display = 'none';
+      canvasEl.classList.remove('hidden');
+      canvasEl.focus();
     }
 
-    window.addEventListener('click', resumeAudioContext);
-    window.addEventListener('keydown', resumeAudioContext);
-    window.addEventListener('touchstart', resumeAudioContext);
+    // Attach click and touch triggers across the button and loading screen container
+    startBtn.addEventListener('click', startGame);
+    loadingScreen.addEventListener('click', startGame);
+    loadingScreen.addEventListener('touchstart', startGame);
 
     var Module = {
       print: (function () {
