@@ -60,10 +60,6 @@
       outline: none;
     }
 
-    canvas.emscripten.hidden {
-      display: none;
-    }
-
     #loading-screen {
       position: absolute;
       top: 0;
@@ -249,7 +245,7 @@
       <button id="start-btn">CLICK TO PLAY</button>
     </div>
 
-    <canvas class="emscripten hidden" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
   </div>
 
   <pre id="output"></pre>
@@ -263,17 +259,10 @@
     var canvasEl = document.getElementById('canvas');
 
     var isWasmReady = false;
-    var minTimeElapsed = false;
     var isReadyToStart = false;
 
-    // Enforce 2-second minimum animation timeout
-    setTimeout(function () {
-      minTimeElapsed = true;
-      checkLaunchReady();
-    }, 2000);
-
     function checkLaunchReady() {
-      if (isWasmReady && minTimeElapsed) {
+      if (isWasmReady) {
         isReadyToStart = true;
         loadingBarOuter.style.display = 'none';
         loadingStatus.style.display = 'none';
@@ -290,7 +279,6 @@
       unlockWebAudio();
 
       loadingScreen.style.display = 'none';
-      canvasEl.classList.remove('hidden');
       canvasEl.focus();
     }
 
