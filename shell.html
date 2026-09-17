@@ -200,6 +200,40 @@
       white-space: pre-wrap;
     }
   </style>
+
+  <script>
+    // --- WebAudio unlock ---------------------------------------------
+    // Browsers refuse to let an AudioContext actually run until it's been
+    // resumed from inside a real user-gesture handler. raylib's web build
+    // (via miniaudio) creates its AudioContext internally the moment the
+    // wasm module boots — long before the player has clicked anything —
+    // so it comes up "suspended" and stays silent forever unless we
+    // explicitly resume it on click/tap.
+    //
+    // Because we don't have a direct handle into miniaudio's internals,
+    // we wrap the AudioContext constructor itself so we capture whatever
+    // context gets created, regardless of which backend raylib is using.
+    // This MUST run before the emscripten module script (loaded via
+    // {{{ SCRIPT }}} at the end of body) so it's in place before that
+    // context gets constructed.
+    (function () {
+      window.__capturedAudioContexts = [];
+      var Native = window.AudioContext || window.webkitAudioContext;
+      if (Native) {
+        window.AudioContext = window.webkitAudioContext = function (...args) {
+          var ctx = new Native(...args);
+          window.__capturedAudioContexts.push(ctx);
+          return ctx;
+        };
+      }
+    })();
+
+    function unlockWebAudio() {
+      (window.__capturedAudioContexts || []).forEach(function (ctx) {
+        if (ctx.state === 'suspended') ctx.resume();
+      });
+    }
+  </script>
 </head>
 
 <body>
@@ -250,14 +284,10 @@
     function startGame() {
       if (!isReadyToStart) return;
 
-      // Unlocks raylib's WebAudio AudioContext upon explicit click/tap gesture
-      if (typeof emscriptenRegisterAudioObject !== 'undefined' || typeof Module !== 'undefined') {
-        var audioCtx = (Module.AL && Module.AL.ALAudioContext) || window.webAudioContext;
-        if (!audioCtx && typeof AL !== 'undefined') audioCtx = AL.currentContext ? AL.currentContext.audioCtx : null;
-        if (audioCtx && audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-      }
+      // Unlocks raylib's WebAudio AudioContext on this explicit click/tap
+      // gesture. See the capture shim in <head> — this resumes whatever
+      // context miniaudio created internally, whether or not it exists yet.
+      unlockWebAudio();
 
       loadingScreen.style.display = 'none';
       canvasEl.classList.remove('hidden');
@@ -307,6 +337,10 @@
       onRuntimeInitialized: function () {
         isWasmReady = true;
         checkLaunchReady();
+        // Covers the case where the player clicked "CLICK TO PLAY" before
+        // the wasm module (and its internal AudioContext) had finished
+        // initializing — try the unlock again now that it definitely exists.
+        unlockWebAudio();
       }
     };
 
