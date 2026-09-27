@@ -18,6 +18,7 @@
 typedef enum {
     STATE_TITLE,
     STATE_GAMEPLAY,
+    STATE_PAUSE,
     STATE_GAMEOVER,
     STATE_VICTORY
 } GameState;
@@ -43,7 +44,7 @@ typedef struct {
     float animTimer;
     int moveDirY;
     float scaleMultiplier;
-    int health;       // Added HP counter for multi-hit enemies
+    int health;
     int maxHealth;
 } Enemy;
 
@@ -63,6 +64,19 @@ bool heartActive;
 float spikeWallX;
 
 int currentLevel = 1;
+
+// Invincibility & Konami Code Variables
+bool isInvincible = false;
+float invincibilityFlashTimer = 0.0f;
+
+const KeyboardKey konamiCode[] = {
+    KEY_UP, KEY_UP,
+    KEY_DOWN, KEY_DOWN,
+    KEY_LEFT, KEY_RIGHT,
+    KEY_LEFT, KEY_RIGHT,
+    KEY_B, KEY_A
+};
+int konamiIndex = 0;
 
 void DrawSpriteFrameExTint(int frameIndex, Vector2 pos, float rotation, bool flipX, float customScale, Color tint) {
     Rectangle src = { (frameIndex - 1) * SPRITE_SIZE, 0, SPRITE_SIZE, SPRITE_SIZE };
@@ -110,7 +124,6 @@ void LoadLevel(int level) {
     for (int i = 0; i < MAX_PARTICLES; i++) particles[i].active = false;
 
     if (currentLevel == 1) {
-        // --- LEVEL 1: CASTLE ---
         walls[0] = (Wall){ (Rectangle){ 600, 100, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
         walls[1] = (Wall){ (Rectangle){ 900, 300, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
         walls[2] = (Wall){ (Rectangle){ 1100, 0, RENDER_SIZE, RENDER_SIZE * 7 }, true, false };
@@ -124,7 +137,6 @@ void LoadLevel(int level) {
         heartActive = true;
         spikeWallX = 1650.0f;
     } else {
-        // --- LEVEL 2: EXTENDED ICE LEVEL ---
         walls[0] = (Wall){ (Rectangle){ 600, 100, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
         walls[1] = (Wall){ (Rectangle){ 900, 250, RENDER_SIZE, RENDER_SIZE * 3 }, true, false };
         walls[2] = (Wall){ (Rectangle){ 1200, 0, RENDER_SIZE, RENDER_SIZE * 6 }, true, false };
@@ -132,19 +144,16 @@ void LoadLevel(int level) {
         walls[4] = (Wall){ (Rectangle){ 1900, 100, RENDER_SIZE, RENDER_SIZE * 4 }, true, false };
         walls[5] = (Wall){ (Rectangle){ 2300, 250, RENDER_SIZE, RENDER_SIZE * 2 }, true, false };
 
-        // Crows
         enemies[0] = (Enemy){ ENEMY_CROW, (Vector2){ 700, 200 }, 200.0f, 0.0f, true, false, 0.0f, 28, 0.0f, 0, 1.0f, 1, 1 };
         enemies[1] = (Enemy){ ENEMY_CROW, (Vector2){ 1100, 150 }, 150.0f, 1.0f, true, false, 0.0f, 28, 0.0f, 0, 1.0f, 1, 1 };
         enemies[2] = (Enemy){ ENEMY_CROW, (Vector2){ 1600, 250 }, 250.0f, 2.0f, true, false, 0.0f, 28, 0.0f, 0, 1.0f, 1, 1 };
         enemies[3] = (Enemy){ ENEMY_CROW, (Vector2){ 2100, 180 }, 180.0f, 0.5f, true, false, 0.0f, 28, 0.0f, 0, 1.0f, 1, 1 };
 
-        // Frost Giants (5 HP, 2.0x scale)
         enemies[4] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 850, 150 }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 2.0f, 5, 5 };
         enemies[5] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 1400, 300 }, 0, 0, true, false, 0.0f, 32, 0.0f, -1, 2.0f, 5, 5 };
         enemies[6] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2000, 100 }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 2.0f, 5, 5 };
 
-        // Frost Giant defending the Heart Goal!
-        enemies[7] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2700, GAME_HEIGHT / 2.0f }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 4.0f, 5, 5 };
+        enemies[7] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2700, GAME_HEIGHT / 2.0f }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 4.0f, 10, 10 };
 
         heartPos = (Vector2){ 2800, GAME_HEIGHT / 2.0f };
         heartActive = true;
@@ -153,6 +162,8 @@ void LoadLevel(int level) {
 }
 
 void ResetGame(void) {
+    isInvincible = false;
+    konamiIndex = 0;
     LoadLevel(1);
 }
 
@@ -197,12 +208,42 @@ int main(void) {
 
         UpdateMusicStream(musicDirge);
 
-        for (int i = 0; i < MAX_PARTICLES; i++) {
-            if (particles[i].active) {
-                particles[i].position.x += particles[i].velocity.x * deltaTime;
-                particles[i].position.y += particles[i].velocity.y * deltaTime;
-                particles[i].alpha -= 1.2f * deltaTime;
-                if (particles[i].alpha <= 0.0f) particles[i].active = false;
+        // Pause Toggle & Konami Input Sequence
+        if (currentState == STATE_GAMEPLAY && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER))) {
+            currentState = STATE_PAUSE;
+            konamiIndex = 0;
+        } else if (currentState == STATE_PAUSE) {
+            // Unpause triggers
+            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
+                if (konamiIndex == sizeof(konamiCode) / sizeof(konamiCode[0])) {
+                    isInvincible = true;
+                    if (SOUND) PlaySound(fx1up);
+                }
+                currentState = STATE_GAMEPLAY;
+                konamiIndex = 0;
+            } else {
+                // Check sequence inputs during pause
+                int key = GetKeyPressed();
+                if (key > 0) {
+                    if (konamiIndex < (int)(sizeof(konamiCode) / sizeof(konamiCode[0])) && key == konamiCode[konamiIndex]) {
+                        konamiIndex++;
+                    } else if (key == konamiCode[0]) {
+                        konamiIndex = 1;
+                    } else {
+                        konamiIndex = 0;
+                    }
+                }
+            }
+        }
+
+        if (currentState != STATE_PAUSE) {
+            for (int i = 0; i < MAX_PARTICLES; i++) {
+                if (particles[i].active) {
+                    particles[i].position.x += particles[i].velocity.x * deltaTime;
+                    particles[i].position.y += particles[i].velocity.y * deltaTime;
+                    particles[i].alpha -= 1.2f * deltaTime;
+                    if (particles[i].alpha <= 0.0f) particles[i].active = false;
+                }
             }
         }
 
@@ -214,13 +255,20 @@ int main(void) {
                     titleAnimFrame = (titleAnimFrame == 1) ? 2 : 1;
                 }
 
-                if (IsKeyPressed(KEY_SPACE) || GetTouchPointCount() > 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || GetTouchPointCount() > 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     ResetGame();
                     currentState = STATE_GAMEPLAY;
                 }
                 break;
 
+            case STATE_PAUSE:
+                break;
+
             case STATE_GAMEPLAY:
+                if (isInvincible) {
+                    invincibilityFlashTimer += deltaTime * 20.0f;
+                }
+
                 groundOffset -= scrollSpeed * deltaTime;
                 if (groundOffset <= -RENDER_SIZE) groundOffset += RENDER_SIZE;
 
@@ -313,9 +361,13 @@ int main(void) {
 
                         Rectangle playerRect = { playerPos.x - RENDER_SIZE/2, playerPos.y - RENDER_SIZE/2, RENDER_SIZE, RENDER_SIZE };
                         if (projectiles[i].active && CheckCollisionRecs(playerRect, projRect)) {
-                            SpawnParticles(playerPos, RED);
-                            PlaySound(fxNoiseWave);
-                            currentState = STATE_GAMEOVER;
+                            if (!isInvincible) {
+                                SpawnParticles(playerPos, RED);
+                                PlaySound(fxNoiseWave);
+                                currentState = STATE_GAMEOVER;
+                            } else {
+                                projectiles[i].active = false;
+                            }
                         }
 
                         if (projectiles[i].position.x < -20) projectiles[i].active = false;
@@ -332,9 +384,11 @@ int main(void) {
 
                         if (CheckCollisionRecs(playerRect, walls[i].rect)) {
                             if (walls[i].isSpike) {
-                                SpawnParticles(playerPos, RED);
-                                PlaySound(fxNoiseWave);
-                                currentState = STATE_GAMEOVER;
+                                if (!isInvincible) {
+                                    SpawnParticles(playerPos, RED);
+                                    PlaySound(fxNoiseWave);
+                                    currentState = STATE_GAMEOVER;
+                                }
                             } else {
                                 playerPos.x = walls[i].rect.x - RENDER_SIZE / 2;
                                 pushedByWall = true;
@@ -348,9 +402,13 @@ int main(void) {
                 }
 
                 if (playerPos.x - RENDER_SIZE / 2 <= 0) {
-                    SpawnParticles(playerPos, RED);
-                    PlaySound(fxNoiseWave);
-                    currentState = STATE_GAMEOVER;
+                    if (!isInvincible) {
+                        SpawnParticles(playerPos, RED);
+                        PlaySound(fxNoiseWave);
+                        currentState = STATE_GAMEOVER;
+                    } else {
+                        playerPos.x = RENDER_SIZE / 2;
+                    }
                 }
 
                 // Update Enemies
@@ -361,7 +419,6 @@ int main(void) {
                         Color particleColor = (currentLevel == 1) ? LIME : (enemies[i].type == ENEMY_CROW ? SKYBLUE : BLUE);
 
                         if (enemies[i].isDead) {
-                            // Dead enemies maintain position and scroll left into icicles
                             enemies[i].position.x -= scrollSpeed * deltaTime;
 
                             Rectangle deadEnemyRect = { enemies[i].position.x - renderSizeE/2, enemies[i].position.y - renderSizeE/2, renderSizeE, renderSizeE };
@@ -459,7 +516,6 @@ int main(void) {
                             continue;
                         }
 
-                        // Projectile Shooting (ONLY Goblins and Crows shoot, Frost Giants DO NOT shoot)
                         if (enemies[i].type == ENEMY_GOBLIN || enemies[i].type == ENEMY_CROW) {
                             enemies[i].shootTimer += deltaTime;
                             float shootInterval = (enemies[i].type == ENEMY_GOBLIN) ? 1.2f : 1.5f;
@@ -477,9 +533,15 @@ int main(void) {
                         }
 
                         if (CheckCollisionRecs(playerRect, enemyRect)) {
-                            SpawnParticles(playerPos, RED);
-                            PlaySound(fxNoiseWave);
-                            currentState = STATE_GAMEOVER;
+                            if (!isInvincible) {
+                                SpawnParticles(playerPos, RED);
+                                PlaySound(fxNoiseWave);
+                                currentState = STATE_GAMEOVER;
+                            } else {
+                                enemies[i].isDead = true;
+                                enemies[i].animFrame = (enemies[i].type == ENEMY_GOBLIN) ? 16 : (enemies[i].type == ENEMY_CROW ? 30 : 34);
+                                SpawnParticles(enemies[i].position, particleColor);
+                            }
                         }
 
                         for (int j = 0; j < MAX_AXES; j++) {
@@ -500,7 +562,6 @@ int main(void) {
                     }
                 }
 
-                // Level End Goal Transition
                 if (heartActive) {
                     heartPos.x -= scrollSpeed * deltaTime;
                     spikeWallX -= scrollSpeed * deltaTime;
@@ -516,16 +577,24 @@ int main(void) {
                             currentState = STATE_VICTORY;
                         }
                     } else if (CheckCollisionRecs(playerRect, endSpikeRect)) {
-                        SpawnParticles(playerPos, RED);
-                        PlaySound(fxNoiseWave);
-                        currentState = STATE_GAMEOVER;
+                        if (!isInvincible) {
+                            SpawnParticles(playerPos, RED);
+                            PlaySound(fxNoiseWave);
+                            currentState = STATE_GAMEOVER;
+                        }
                     }
                 }
                 break;
 
             case STATE_GAMEOVER:
+                if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || GetTouchPointCount() > 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    LoadLevel(currentLevel);
+                    currentState = STATE_GAMEPLAY;
+                }
+                break;
+
             case STATE_VICTORY:
-                if (IsKeyPressed(KEY_SPACE) || GetTouchPointCount() > 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || GetTouchPointCount() > 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     currentState = STATE_TITLE;
                 }
                 break;
@@ -543,11 +612,10 @@ int main(void) {
 
             if (currentState == STATE_TITLE) {
                 DrawText("AXE RUNNER", GAME_WIDTH / 2 - MeasureText("AXE RUNNER", 40) / 2, 150, 40, RAYWHITE);
-                DrawText("Touch / Any key to start", GAME_WIDTH / 2 - MeasureText("Touch / Any key to start", 20) / 2, 250, 20, LIGHTGRAY);
+                DrawText("Touch / Press Space to Start", GAME_WIDTH / 2 - MeasureText("Touch / Press Space to Start", 20) / 2, 250, 20, LIGHTGRAY);
                 DrawSpriteFrame(titleAnimFrame, (Vector2){ GAME_WIDTH / 2, 320 }, 0, false);
             }
             else {
-                // Left Hazard Wall (Icicles rotated 90 degrees for Level 2)
                 if (currentLevel == 1) {
                     for (int y = 0; y < GAME_HEIGHT - RENDER_SIZE; y += RENDER_SIZE) {
                         DrawSpriteFrame(9, (Vector2){ RENDER_SIZE/2, y + RENDER_SIZE/2 }, 180.0f, false);
@@ -583,7 +651,6 @@ int main(void) {
                     if (enemies[i].active) {
                         Color renderTint = WHITE;
 
-                        // Darken Frost Giants each time they take damage
                         if (enemies[i].type == ENEMY_FROST_GIANT && enemies[i].health < enemies[i].maxHealth) {
                             float healthRatio = (float)enemies[i].health / (float)enemies[i].maxHealth;
                             unsigned char val = (unsigned char)(80 + 175 * healthRatio);
@@ -607,7 +674,19 @@ int main(void) {
                     if (axes[i].active) DrawSpriteFrame(12, axes[i].position, axes[i].rotation, false);
                 }
 
-                if (currentState == STATE_GAMEPLAY) DrawSpriteFrame(playerAnimFrame, playerPos, 0, false);
+                // Render Player with Mario Star Flashing when Invincible
+                if (currentState == STATE_GAMEPLAY || currentState == STATE_PAUSE) {
+                    Color playerTint = WHITE;
+                    if (isInvincible) {
+                        float flashVal = sinf(invincibilityFlashTimer);
+                        if (flashVal > 0.0f) {
+                            playerTint = (Color){ 255, 255, 255, 255 }; // Pure white flash
+                        } else {
+                            playerTint = (Color){ 255, 220, 100, 255 }; // Gold/yellow tint alternate
+                        }
+                    }
+                    DrawSpriteFrameExTint(playerAnimFrame, playerPos, 0, false, SCALE, playerTint);
+                }
 
                 for (int i = 0; i < MAX_PARTICLES; i++) {
                     if (particles[i].active) {
@@ -615,12 +694,16 @@ int main(void) {
                     }
                 }
 
-                if (currentState == STATE_GAMEOVER) {
+                if (currentState == STATE_PAUSE) {
+                    DrawRectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, ColorAlpha(BLACK, 0.4f));
+                    DrawText("PAUSED", GAME_WIDTH / 2 - MeasureText("PAUSED", 40) / 2, 180, 40, RAYWHITE);
+                    DrawText("Press Space or Enter to Resume", GAME_WIDTH / 2 - MeasureText("Press Space or Enter to Resume", 20) / 2, 240, 20, LIGHTGRAY);
+                } else if (currentState == STATE_GAMEOVER) {
                     DrawText("GAME OVER", GAME_WIDTH / 2 - MeasureText("GAME OVER", 40) / 2, 180, 40, RED);
-                    DrawText("Touch / Press key to try again", GAME_WIDTH / 2 - MeasureText("Touch / Press key to try again", 20) / 2, 300, 20, LIGHTGRAY);
+                    DrawText("Touch / Press Space to Retry Level", GAME_WIDTH / 2 - MeasureText("Touch / Press Space to Retry Level", 20) / 2, 300, 20, LIGHTGRAY);
                 } else if (currentState == STATE_VICTORY) {
                     DrawText("ALL STAGES CLEARED!", GAME_WIDTH / 2 - MeasureText("ALL STAGES CLEARED!", 40) / 2, 180, 40, GOLD);
-                    DrawText("Touch / Press key to play again", GAME_WIDTH / 2 - MeasureText("Touch / Press key to play again", 20) / 2, 300, 20, LIGHTGRAY);
+                    DrawText("Touch / Press Space to Play Again", GAME_WIDTH / 2 - MeasureText("Touch / Press Space to Play Again", 20) / 2, 300, 20, LIGHTGRAY);
                 }
             }
         EndTextureMode();
