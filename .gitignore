@@ -1,2 +1,4 @@
 .DS_Store
 .env
+# Set VSCode to point at Raylib installed through Homebrew on MacOS, but would be different for other setups.
+.vscode

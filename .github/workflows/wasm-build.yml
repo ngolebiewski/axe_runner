@@ -67,6 +67,13 @@ jobs:
           cp axe.png dist/ 2>/dev/null || true
           cp alagard.* dist/ 2>/dev/null || true
 
+      - name: Upload Build Artifact for Itch.io
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-wasm-dist
+          path: dist/
+          retention-days: 7
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
