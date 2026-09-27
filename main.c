@@ -273,8 +273,8 @@ int main(void) {
                 if (groundOffset <= -RENDER_SIZE) groundOffset += RENDER_SIZE;
 
                 float moveY = 0.0f;
-                if (IsKeyDown(KEY_UP)) moveY -= playerSpeed * deltaTime;
-                if (IsKeyDown(KEY_DOWN)) moveY += playerSpeed * deltaTime;
+                if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) moveY -= playerSpeed * deltaTime;
+                if (IsKeyDown(KEY_DOWN)|| IsKeyDown(KEY_S)) moveY += playerSpeed * deltaTime;
 
                 if (GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                     Vector2 touchPos = (GetTouchPointCount() > 0) ? GetTouchPosition(0) : GetMousePosition();
