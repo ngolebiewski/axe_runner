@@ -153,7 +153,7 @@ void LoadLevel(int level) {
         enemies[5] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 1400, 300 }, 0, 0, true, false, 0.0f, 32, 0.0f, -1, 2.0f, 5, 5 };
         enemies[6] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2000, 100 }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 2.0f, 5, 5 };
 
-        enemies[7] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2700, GAME_HEIGHT / 2.0f }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 4.0f, 10, 10 };
+        enemies[7] = (Enemy){ ENEMY_FROST_GIANT, (Vector2){ 2700, GAME_HEIGHT / 2.0f }, 0, 0, true, false, 0.0f, 32, 0.0f, 1, 4.0f, 20, 20 };
 
         heartPos = (Vector2){ 2800, GAME_HEIGHT / 2.0f };
         heartActive = true;
