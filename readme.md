@@ -15,3 +15,10 @@ You are a Dwarf, kicked to Hel by Thor, trying to escape the dungeon and its den
 ```bash
 gcc main.c -I/opt/homebrew/include -L/opt/homebrew/lib -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -o axe_runner
 ```
+
+### Notes
+
+### Art references and inspiration
+- Viking coins with stylized crosses: https://upload.wikimedia.org/wikipedia/commons/a/a0/Thurcaston_Viking_mixed_coin_hoard_(FindID_106146).jpg
+- Viking art essay from the Met Museum: https://www.metmuseum.org/essays/the-vikings-780-1100
+- Cool earring for world snake: https://www.metmuseum.org/art/collection/search/468363
